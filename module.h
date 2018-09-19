@@ -172,6 +172,7 @@ namespace ws::module {
         // These are the most universally supported styles.
         constexpr auto bold = rang::style::bold;
         constexpr auto reverse = rang::style::reversed;
+        constexpr auto italic = rang::style::italic;
     }
 
 
@@ -200,6 +201,39 @@ namespace ws::module {
 
         // Success style, set bold and success colour.
         struct Success {};
+
+        // Created by the macro HERE, can be formatted
+        struct Location_ {
+            const char* file;
+            const char* function;
+            const char* signature;
+            unsigned long long line;
+        };
+
+        std::ostream& location_def_format(std::ostream& os, const Location_& l);
+        std::ostream& location_file_format(std::ostream& os, const Location_& l);
+        std::ostream& location_func_format(std::ostream& os, const Location_& l);
+
+        template<typename std::ostream&(*F)(std::ostream&, const Location_&)>
+        struct Location : Location_ {
+            template<typename std::ostream&(*G)(std::ostream&, const Location_&)>
+            Location<G> format() const {
+                return Location<G> { static_cast<Location_>(*this) };
+            }
+
+            Location<location_def_format> def() {
+                return this->format<location_def_format>();
+            }
+
+            Location<location_file_format> file() {
+                return this->format<location_file_format>();
+            }
+
+            Location<location_func_format> func() {
+                return this->format<location_func_format>();
+            }
+        };
+
     }
 
 
@@ -288,6 +322,14 @@ namespace ws::module {
     }
 
 
+    template<typename std::ostream&(*F)(std::ostream&, const details::Location_&)>
+    inline std::ostream& operator<<(
+        std::ostream& os, const details::Location<F>& l
+    ) {
+        return F(os, static_cast<details::Location_>(l));
+    }
+
+
 
     // Custom styles
     namespace style {
@@ -297,8 +339,24 @@ namespace ws::module {
         inline details::Error error;
         inline details::Success success;
     }
+    
+    namespace details {
+        std::ostream& location_def_format(std::ostream& os, const Location_& l) {
+            return os << style::italic << "(" << l.file << ":" << l.line << ")" << style::reset << " from " << style::bold << l.function << style::reset << ": ";
+        }
+
+        std::ostream& location_file_format(std::ostream& os, const Location_& l) {
+            return os << style::italic << "(" << l.file << ":" << l.line << ")" << style::reset << ": ";
+        }
+
+        std::ostream& location_func_format(std::ostream& os, const Location_& l) {
+            return os <<  "from " << style::bold << l.signature << style::reset << ": ";
+        }
+    }
 
 
+    // Print `(<file>:<line>) from <function>`
+    #define HERE (::ws::module::details::Location<::ws::module::details::location_def_format> { __FILE__, __FUNCTION__, __PRETTY_FUNCTION__, __LINE__ })
 
     // Output symbols
     namespace details {
