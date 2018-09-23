@@ -12,6 +12,7 @@
 #include <random>
 #include <sstream>
 #include <iterator>
+#include <streambuf>
 
 
 #include "rang/include/rang.hpp"
@@ -316,10 +317,93 @@ namespace ws::module {
     inline std::ostream& piper = std::cout;
     inline std::ostream& printer = std::cerr;
 
+    namespace details {
+        class PrefixedStream : private std::streambuf {
+        public:
+
+            static inline PrefixedStream& get_instance() {
+                static PrefixedStream instance(printer);
+                return instance;
+            }
+
+            int flush() {
+                return buffer->pubsync();
+            }
+
+            std::string get_prefix() const {
+                return prefix;
+            }
+
+            void set_prefix(std::string const prefix) {
+                this->prefix = prefix;
+            }
+
+            void append_prefix(std::string const prefix) {
+                this->prefix += prefix;
+            }
+
+            void remove_prefix(std::size_t size) {
+                auto length = prefix.size();
+                prefix.resize(length < size ? 0 : length - size);
+            }
+
+            void disable_once() {
+                is_start_of_line = false;
+            }
+
+        protected:
+
+            virtual int overflow(int c) override {
+                if ( is_start_of_line && c != '\n' )
+                    buffer->sputn(prefix.data(), prefix.size());
+                
+                is_start_of_line = c == '\n';
+                return buffer->sputc(c);
+            }
+
+            virtual int sync() override {
+                return flush();
+            }
+
+        private:
+
+            PrefixedStream(std::ostream& os) : os(&os), buffer(os.rdbuf()), is_start_of_line(true) {
+                this->os->rdbuf(static_cast<std::streambuf*>(this));
+            }
+
+            std::ostream* os;
+            std::streambuf* buffer;
+
+            bool is_start_of_line;
+
+            std::string prefix;
+
+        };
+    }
 
 
 
 
+    // Prefix
+    std::string get_prefix() {
+        return details::PrefixedStream::get_instance().get_prefix();
+    }
+
+    void set_prefix(std::string const prefix) {
+        return details::PrefixedStream::get_instance().set_prefix(prefix);
+    }
+
+    void append_prefix(std::string const prefix) {
+        return details::PrefixedStream::get_instance().append_prefix(prefix);
+    }
+
+    void remove_prefix(std::size_t size) {
+        return details::PrefixedStream::get_instance().remove_prefix(size);
+    }
+
+    void disable_prefix_once() {
+        return details::PrefixedStream::get_instance().disable_once();
+    }
 
 
 
@@ -369,7 +453,10 @@ namespace ws::module {
     template <typename... Ts>
     inline std::ostream& notice(Ts&&... args) {
         ws::module::print(style::notice, details::symbol::notice);
-        return ws::module::print(std::forward<Ts&&>(args)...);
+        append_prefix("    ");
+        auto& os = ws::module::print(std::forward<Ts&&>(args)...);
+        remove_prefix(4);
+        return os;
     }
 
 
@@ -377,7 +464,10 @@ namespace ws::module {
     template <typename... Ts>
     inline std::ostream& warn(Ts&&... args) {
         ws::module::print(style::warn, details::symbol::warn);
-        return ws::module::print(std::forward<Ts&&>(args)...);
+        append_prefix("    ");
+        auto& os = ws::module::print(std::forward<Ts&&>(args)...);
+        remove_prefix(4);
+        return os;
     }
 
 
@@ -385,7 +475,10 @@ namespace ws::module {
     template <typename... Ts>
     inline std::ostream& error(Ts&&... args) {
         ws::module::print(style::error, details::symbol::error);
-        return ws::module::print(std::forward<Ts&&>(args)...);
+        append_prefix("    ");
+        auto& os = ws::module::print(std::forward<Ts&&>(args)...);
+        remove_prefix(4);
+        return os;
     }
 
 
@@ -393,7 +486,10 @@ namespace ws::module {
     template <typename... Ts>
     inline std::ostream& success(Ts&&... args) {
         ws::module::print(style::success, details::symbol::success);
-        return ws::module::print(std::forward<Ts&&>(args)...);
+        append_prefix("    ");
+        auto& os = ws::module::print(std::forward<Ts&&>(args)...);
+        remove_prefix(4);
+        return os;
     }
 
 
@@ -401,28 +497,28 @@ namespace ws::module {
     // Print lines too.
     template <typename... Ts>
     inline std::ostream& noticeln(Ts&&... args) {
-        return ws::module::notice(std::forward<Ts&&>(args)..., '\n');
+        return ws::module::notice(std::forward<Ts&&>(args)...) << '\n';
     }
 
 
 
     template <typename... Ts>
     inline std::ostream& warnln(Ts&&... args) {
-        return ws::module::warn(std::forward<Ts&&>(args)..., '\n');
+        return ws::module::warn(std::forward<Ts&&>(args)...) << '\n';
     }
 
 
 
     template <typename... Ts>
     inline std::ostream& errorln(Ts&&... args) {
-        return ws::module::error(std::forward<Ts&&>(args)..., '\n');
+        return ws::module::error(std::forward<Ts&&>(args)...) << '\n';
     }
 
 
 
     template <typename... Ts>
     inline std::ostream& successln(Ts&&... args) {
-        return ws::module::success(std::forward<Ts&&>(args)..., '\n');
+        return ws::module::success(std::forward<Ts&&>(args)...) << '\n';
     }
 
 
@@ -474,7 +570,7 @@ namespace ws::module {
 
     template <typename... Ts>
     inline std::ostream& rainbowln(Ts&&... args) {
-        return ws::module::rainbow(std::forward<Ts&&>(args)..., '\n');
+        return ws::module::rainbow(std::forward<Ts&&>(args)...) << '\n';
     }
 
 
